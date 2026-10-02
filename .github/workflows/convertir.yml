@@ -5,7 +5,7 @@ name: Convertir videos
 # desde la pestaña "Actions" → "Convertir videos" → "Run workflow".
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '4,19,34,49 * * * *'   # cada 15 min, evitando el minuto 0 (el más cargado de GitHub)
   workflow_dispatch:
 
 permissions:
