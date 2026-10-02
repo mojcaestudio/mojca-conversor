@@ -112,17 +112,24 @@ def convert(item, chunk):
                 f.write(b)
         w, h, dur, has_audio = probe(src)
         print(f'  {w}x{h}, {dur:.1f} s', flush=True)
-        hd, poster, prev = (os.path.join(d, n) for n in ('hd.mp4', 'portada.jpg', 'prev.mp4'))
-        vf = scale_short(1080) + ',format=yuv420p'
-        audio = ['-c:a', 'aac', '-b:a', '160k', '-ac', '2'] if has_audio else ['-an']
-        ff(['-i', src, '-map', '0:v:0'] + (['-map', '0:a:0'] if has_audio else []) + ['-vf', vf, '-c:v', 'libx264', '-preset', 'medium', '-crf', '21', '-maxrate', '9M', '-bufsize', '18M', '-profile:v', 'high'] + audio + ['-movflags', '+faststart', hd])
+        need = set(item.get('need') or ['hd', 'sd', 'poster', 'preview'])
+        outs = {k: os.path.join(d, k + ('.jpg' if k == 'poster' else '.mp4')) for k in need}
+        amap = ['-map', '0:a:0'] if has_audio else []
+        def enc(target, crf, maxrate, abr, out):
+            audio = ['-c:a', 'aac', '-b:a', abr, '-ac', '2'] if has_audio else ['-an']
+            ff(['-i', src, '-map', '0:v:0'] + amap + ['-vf', scale_short(target) + ',format=yuv420p', '-c:v', 'libx264', '-preset', 'medium', '-crf', str(crf), '-maxrate', maxrate, '-bufsize', str(int(maxrate[:-1]) * 2) + 'M', '-profile:v', 'high'] + audio + ['-movflags', '+faststart', out])
+        if 'hd' in need: enc(1080, 22, '7M', '160k', outs['hd'])        # compu
+        if 'sd' in need: enc(720, 23, '3M', '128k', outs['sd'])         # celular: la mitad de peso
         t0 = min(1.2, dur * 0.12)
-        ff(['-ss', f'{t0:.2f}', '-i', src, '-frames:v', '1', '-vf', scale_short(720), '-q:v', '3', poster])
-        plen = max(1.0, min(8.0, dur - t0 - 0.1))
-        ff(['-ss', f'{t0:.2f}', '-t', f'{plen:.2f}', '-i', src, '-an', '-vf', scale_short(480) + ',fps=30,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '27', '-maxrate', '1500k', '-bufsize', '3000k', '-profile:v', 'main', '-movflags', '+faststart', prev])
-        for kind, path in (('poster', poster), ('preview', prev), ('hd', hd)):
-            print(f'  subiendo {kind} ({os.path.getsize(path) / 1048576:.1f} MB)', flush=True)
-            upload(vid, kind, path, chunk)
+        if 'poster' in need:
+            ff(['-ss', f'{t0:.2f}', '-i', src, '-frames:v', '1', '-vf', scale_short(540), '-q:v', '4', outs['poster']])
+        if 'preview' in need:
+            plen = max(1.0, min(8.0, dur - t0 - 0.1))
+            ff(['-ss', f'{t0:.2f}', '-t', f'{plen:.2f}', '-i', src, '-an', '-vf', scale_short(480) + ',fps=30,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '27', '-maxrate', '1500k', '-bufsize', '3000k', '-profile:v', 'main', '-movflags', '+faststart', outs['preview']])
+        for kind in ('poster', 'preview', 'sd', 'hd'):
+            if kind not in outs: continue
+            print(f'  subiendo {kind} ({os.path.getsize(outs[kind]) / 1048576:.1f} MB)', flush=True)
+            upload(vid, kind, outs[kind], chunk)
         r = call('POST', fields={'action': 'done', 'id': vid, 'w': w, 'h': h})
         if not r.get('success'): raise RuntimeError(r.get('error', 'no se pudo terminar'))
         print('  ✓ listo', flush=True)
