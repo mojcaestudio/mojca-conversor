@@ -29,12 +29,15 @@ def token():
 def call(method, params=None, fields=None, file_bytes=None, retries=4):
     for attempt in range(retries):
         try:
-            headers = {'User-Agent': UA, 'Authorization': 'Bearer ' + token()}
+            t = token()
+            # el hosting no le pasa a PHP el encabezado Authorization: el pase va también como campo
+            headers = {'User-Agent': UA, 'Authorization': 'Bearer ' + t}
             url = API
             data = None
             if method == 'GET':
-                url += '?' + urllib.parse.urlencode(params or {})
+                url += '?' + urllib.parse.urlencode(dict(params or {}, token=t))
             else:
+                fields = dict(fields or {}, token=t)
                 b = uuid.uuid4().hex
                 parts = []
                 for k, v in (fields or {}).items():
