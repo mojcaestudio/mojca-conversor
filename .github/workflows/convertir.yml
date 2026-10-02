@@ -1,0 +1,34 @@
+name: Convertir videos
+
+# Cada 15 minutos se fija si en mojcaestudio.com hay videos nuevos y les arma
+# la versión 1080, la portada y la vista previa. También se puede correr a mano
+# desde la pestaña "Actions" → "Convertir videos" → "Run workflow".
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # el "pase" firmado que el sitio verifica (sin contraseñas)
+  contents: read
+  actions: write    # sólo para mantener activa la tarea programada
+
+concurrency:
+  group: convertir
+  cancel-in-progress: false
+
+jobs:
+  convertir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - name: Convertir
+        env:
+          SITE: https://mojcaestudio.com
+        run: python3 convertir.py
+      - name: Mantener activa la tarea programada
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/convertir.yml/enable" || true
